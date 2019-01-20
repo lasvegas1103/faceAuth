@@ -33,7 +33,16 @@ class Index extends CI_Controller {
         //$this->viewdata['TrainStatus'] = $this->_personGroupTrainStatus();
 
         //パーソングループパーソンと画像の検証
-        $this->viewdata['Identify'] = $this->_Identify();
+        $this->viewdata['personInfo'] = $this->_Identify();
+
+        //顔が一致しているか判定。一致していれば名前取得
+        if ($this->viewdata['personInfo']['confidence'] > 0.5) {
+
+            $this->viewdata['personInfo'] = $this->_getPersonName($this->viewdata['personInfo']);
+        }else {
+            $this->viewdata['personInfo'] = '認証できませんでした！';
+        }
+
 
 		$this->load->view('faceAuth/face',$this->viewdata);
 	}
@@ -51,7 +60,7 @@ class Index extends CI_Controller {
 
         //画像URL
         $imageUrl =
-            'https://muraseface.blob.core.windows.net/container1/ベッカム2.jpg';
+            'https://muraseface.blob.core.windows.net/container1/ベッカム5.jpeg';
 
         //
         require_once 'HTTP/Request2.php';
@@ -229,7 +238,7 @@ class Index extends CI_Controller {
            $personGroupID = 'murasetest';
 
            //パーソンID取得
-           $personId = '476c20cf-79b5-4269-b23e-766623caa8f3';
+           $personId = 'a4701637-f36d-47b8-be32-833a21fbc2bd';
 
            //method指定
            $request = new Http_Request2($uriBase . '/persongroups/' . $personGroupID . '/persons/' . $personId . '/persistedFaces');
@@ -339,7 +348,7 @@ class Index extends CI_Controller {
         }
 
      /**
-        * パーソングループトレーニングステーrタス取得
+        * パーソングループトレーニングステータス取得
         */
         private function _personGroupTrainStatus()
         {
@@ -420,13 +429,14 @@ class Index extends CI_Controller {
         $request->setMethod(HTTP_Request2::METHOD_POST);
 
           // Request body parameters
-          $faceIds = array('f533b135-1200-4f73-84ff-fd1122e0e154');
+          //faceidを取得
+          $faceIds = array('d4fe9af7-d266-4927-9508-c9e810681084');
           $personGroupId = 'murasetest';
           $body = json_encode(array(
                     'personGroupId' => $personGroupId,
                     'faceIds' => $faceIds,
-                    'maxNumOfCandidatesReturned' => 1,
-                    'confidenceThreshold' =>  0.5
+                    'maxNumOfCandidatesReturned' => 1
+                    //'confidenceThreshold' =>  0.5
                     ));
 
           // Request body
@@ -436,11 +446,84 @@ class Index extends CI_Controller {
         {
             $response = $request->send();
 
-            return $response->getBody();
+            //jsonデータを取り出す
+            $personInfo = array();
+            $json = mb_convert_encoding($response->getBody(), 'UTF8', 'ASCII,JIS,UTF-8,EUC-JP,SJIS-WIN');
+            $jsonArr = json_decode($json,true);
+
+            $personInfo['faceId'] = $jsonArr["0"]["faceId"];
+            $personInfo['personId'] = $jsonArr["0"]["candidates"]["0"]["personId"];
+            $personInfo['confidence'] = $jsonArr["0"]["candidates"]["0"]["confidence"];
+
+            return $personInfo;
+
         }
         catch (HttpException $ex)
         {
             return  $ex;
         }
+        }
+
+     /**
+        * パーソンネーム取得
+        */
+        private function _getPersonName($personInfo)
+        {
+
+         // サブスクリプションキー入力
+           $ocpApimSubscriptionKey = '6a6971151de442f2aa082672658c5fb9';
+
+           // APIのURL
+           $uriBase = 'https://japaneast.api.cognitive.microsoft.com/face/v1.0';
+
+           //
+           require_once 'HTTP/Request2.php';
+
+           //パーソングループID指定
+           $personGroupID = 'murasetest';
+
+           //パーソンID取得
+           $personID = $personInfo['personId'];
+
+           //method指定
+           $request = new Http_Request2($uriBase . '/persongroups/' . $personGroupID . '/persons/' . $personID);
+           $url = $request->getUrl();
+
+           $headers = array(
+               'Ocp-Apim-Subscription-Key' => $ocpApimSubscriptionKey
+           );
+           $request->setHeader($headers);
+
+           $parameters = array(
+               // Request parameters
+               //'returnFaceId' => 'true',
+               //'returnFaceLandmarks' => 'false',
+               'returnFaceAttributes' => 'age,gender,headPose,smile,facialHair,glasses,' .
+                   'emotion,hair,makeup,occlusion,accessories,blur,exposure,noise');
+
+           $url->setQueryVariables($parameters);
+
+           $request->setMethod(HTTP_Request2::METHOD_GET);
+
+           $body = '';
+
+           // Request body
+           $request->setBody($body);
+           try
+           {
+               $response = $request->send();
+                //jsonデータを取り出す(名前を取り出す)
+                $personInfo = array();
+                $json = mb_convert_encoding($response->getBody(), 'UTF8', 'ASCII,JIS,UTF-8,EUC-JP,SJIS-WIN');
+                $jsonArr = json_decode($json,true);
+
+                $personInfo['personName'] = $jsonArr["name"];
+
+               return $personInfo;
+           }
+           catch (HttpException $ex)
+           {
+               return $ex;
+           }
         }
 }

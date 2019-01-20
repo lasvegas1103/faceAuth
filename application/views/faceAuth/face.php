@@ -4,7 +4,7 @@
 </head>
 <body>
 <?php
-echo $Identify;
+echo $personInfo['personName'];
 
 ?>
 </body>
